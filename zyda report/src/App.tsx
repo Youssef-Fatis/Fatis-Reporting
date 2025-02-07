@@ -127,54 +127,152 @@ function DatePickerDemo({
   );
 }
 
+const Z_LIST = [
+  ["5th Settelment", "Tagammoa"],
+  ["5th Settlement", "Tagammoa"],
+  ["Tagammoa 5", "Tagammoa"],
+  ["Tagammoa5", "Tagammoa"],
+  ["Tagammoa 3", "Tagammoa"],
+  ["El Rehab City", "Rehab"],
+  ["Tagammoa 1", "Tagammoa"],
+  ["Tagamm", "Tagammoa"],
+  ["Nasr City", "Nasr City"],
+  ["Pickup", "Pickup"],
+  ["Zamalek", "Dokki"],
+  ["Dokki", "Dokki"],
+  ["Maadi Old", "Maadi-Mokkatam"],
+  ["Madinaty", "October"],
+  ["El Sheikh Zayed", "October"],
+  ["Zahraa El Maadi", "Maadi-Mokkatam"],
+  ["6th of October", "October"],
+  ["Masaken Sheraton", "Sheraton"],
+  ["New Maadi", "Maadi-Mokkatam"],
+  ["Heliopolis", "Nasr City"],
+  ["El Shorouk", "Obour-Sherouk"],
+  ["Mohandeseen", "Mohandeseen"],
+  ["Mohandesen", "Mohandeseen"],
+  ["Mokattam", "Maadi-Mokkatam"],
+  ["El Obour", "Obour-Sherouk"],
+  ["Hadayeq El Maadi", "Maadi-Mokkatam"],
+  ["Zahraa Nasr City ", "Nasr City"],
+  ["Taj City New Cairo", "Nasr City"],
+];
+
+type OrderData = { revenue: number; totalOrders: number };
+
+type ZoneData = Record<string, OrderData>;
+
 function App() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [start, end] = formatToIso(getDateFromOneWeekEarlierToDate(date!));
   const [token, setToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [ordersData, setOrdersData] = useState<{
-    totalOrders: number;
-    aov: number;
-    revenue: number;
-  }>({ aov: 0, revenue: 0, totalOrders: 0 });
+  const [ordersData, setOrdersData] = useState<OrderData>({
+    revenue: 0,
+    totalOrders: 0,
+  });
+  const [zonesData, setZonesData] = useState<ZoneData>({});
   useEffect(() => {
     getToken().then((t) => setToken(t));
   }, []);
-
+  const getZonesDataList = () => {
+    const zoneFomrat: { [k: string]: OrderData } = {};
+    for (const key in zonesData) {
+      let name = key;
+      const mergedName = Z_LIST.find((zone) =>
+        key.toLowerCase().includes(zone[0].toLowerCase())
+      );
+      if (mergedName) name = mergedName[1];
+      if (zoneFomrat[name]) {
+        zoneFomrat[name] = {
+          revenue: zoneFomrat[name].revenue + zonesData[key].revenue,
+          totalOrders:
+            zoneFomrat[name].totalOrders + zonesData[key].totalOrders,
+        };
+      } else {
+        zoneFomrat[name] = {
+          revenue: zonesData[key].revenue,
+          totalOrders: zonesData[key].totalOrders,
+        };
+      }
+    }
+    const zoneFinal: (OrderData & { zoneName: string })[] = [];
+    for (const k in zoneFomrat) {
+      zoneFinal.push({ zoneName: k, ...zoneFomrat[k] });
+    }
+    return zoneFinal;
+  };
   if (!token) return <p className=" ">Loading...</p>;
   return (
-    <div className="flex gap-8  m-10">
-      <div className="flex flex-col w-1/4 justify-center gap-4">
-        <DatePickerDemo date={date} setDate={setDate} />
-        <Button
-          disabled={isLoading}
-          onClick={() => {
-            setOrdersData({
-              aov: 0,
-              revenue: 0,
-              totalOrders: 0,
-            });
-            setIsLoading(true);
-            getData(token, start, end)
-              .then((data) => {
-                setOrdersData({
-                  aov:
-                    data.reduce((acc, order) => acc + order.total, 0) /
-                    data.length,
-                  revenue: data.reduce((acc, order) => acc + order.total, 0),
-                  totalOrders: data.length,
-                });
-              })
-              .finally(() => setIsLoading(false));
-          }}
-        >
-          Get Orders Data
-        </Button>
+    <div className="m-10 flex flex-col gap-8">
+      <div className="flex gap-8">
+        <div className="flex flex-col w-1/4 justify-center gap-4">
+          <DatePickerDemo date={date} setDate={setDate} />
+          <Button
+            disabled={isLoading}
+            onClick={() => {
+              setOrdersData({
+                revenue: 0,
+                totalOrders: 0,
+              });
+              setZonesData(() => ({}));
+              setIsLoading(true);
+              getData(token, start, end)
+                .then((data) => {
+                  setOrdersData({
+                    revenue: data.reduce((acc, order) => acc + order.total, 0),
+                    totalOrders: data.length,
+                  });
+                  data.forEach((o) => {
+                    const order = structuredClone(o);
+                    if (!order.deliveryZone) {
+                      order.deliveryZone = {
+                        __typename: "Pickup",
+                        zoneName: "Pickup",
+                      };
+                    }
+
+                    if (zonesData[order.deliveryZone.zoneName]) {
+                      const zone = zonesData[order.deliveryZone.zoneName];
+                      setZonesData((prev) => ({
+                        ...prev,
+                        [order.deliveryZone!.zoneName]: {
+                          revenue: zone.revenue + order.total,
+                          totalOrders: zone.totalOrders + 1,
+                        },
+                      }));
+                    } else {
+                      setZonesData((prev) => ({
+                        ...prev,
+                        [order.deliveryZone!.zoneName]: {
+                          revenue: order.total,
+                          totalOrders: 1,
+                        },
+                      }));
+                    }
+                  });
+                })
+                .finally(() => setIsLoading(false));
+            }}
+          >
+            Get Orders Data
+          </Button>
+        </div>
+        <div>
+          <p>Total Orders: {ordersData.totalOrders}</p>
+          <p>Total Revenue: {ordersData.revenue}</p>
+          <p>AOV: {ordersData.revenue / ordersData.totalOrders}</p>
+        </div>
       </div>
-      <div>
-        <p>Total Orders: {ordersData.totalOrders}</p>
-        <p>Total Revenue: {ordersData.revenue}</p>
-        <p>AOV: {ordersData.aov}</p>
+      <div className="flex flex-col gap-4">
+        {getZonesDataList().map((zone) => (
+          <div key={zone.zoneName + zone.revenue + zone.totalOrders}>
+            <p className=" font-bold">{zone.zoneName}</p>
+            <p>Total Orders: {zone.totalOrders}</p>
+            <p>Total Revenue: {zone.revenue}</p>
+            <p>AOV: {zone.revenue / zone.totalOrders}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
